@@ -399,22 +399,13 @@ class GMM(object):
 	GMM.asp_mod.save_method_timings('eval')
     
     def train_using_python(self, input_data):
-        from scikits.learn import mixture
-        self.clf = mixture.GMM(n_states=self.M, cvtype='full')
-        self.clf.fit(input_data)
-        return self.clf.means, self.clf.covars
+        pass
     
     def eval_using_python(self, obs_data):
-        from scikits.learn import mixture
-        if self.clf is not None:
-            return self.clf.eval(obs_data)
-        else: return []
+        pass
 
     def predict_using_python(self, obs_data):
-        from scikits.learn import mixture
-        if self.clf is not None:
-            return self.clf.predict(obs_data)
-        else: return []
+        pass
 
     def train(self, input_data):
         N = input_data.shape[0] 

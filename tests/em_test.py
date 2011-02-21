@@ -45,11 +45,7 @@ class EMTester(object):
         self.gmm = GMM(self.M, self.D, self.variant_param_space, self.device_id)
 
     def test_pure_python(self):
-        means, covars = self.gmm.train_using_python(self.X)
-        if not self.from_file:
-            Y = self.gmm.predict_using_python(self.X)
-            self.results['Pure'] = (str(self.plot_id), means, covars, Y.T)
-            self.plot_id += 1
+        pass
 
     def test_sejits(self):        
         likelihood = self.gmm.train(self.X)
@@ -82,7 +78,7 @@ class EMTester(object):
         
 if __name__ == '__main__':
     device_id = 0
-    num_subplots = 5
+    num_subplots = 4
     variant_param_space = {
             'num_blocks_estep': ['16'],
             'num_threads_estep': ['512'],
