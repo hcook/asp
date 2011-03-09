@@ -116,11 +116,11 @@ for(int i = 0; i<num_scratch_components; i++) {
   return;
 }
 // ================== Event data allocation on CPU  ================= :
-void alloc_events_on_CPU(pyublas::numpy_array<float> input_data, int num_events, int num_dimensions) {
+void alloc_events_on_CPU(pyublas::numpy_vector<float> input_data, int num_events, int num_dimensions) {
 
   //printf("Alloc events on CPU\n");
 
-  fcs_data_by_event = input_data.data();
+  fcs_data_by_event = input_data.data().data();
   // Transpose the event data (allows coalesced access pattern in E-step kernel)
   // This has consecutive values being from the same dimension of the data 
   // (num_dimensions by num_events matrix)
@@ -148,24 +148,24 @@ void alloc_events_on_GPU(int num_dimensions, int num_events) {
 }
 
 //hack hack..
-void relink_components_on_CPU(pyublas::numpy_array<float> weights, pyublas::numpy_array<float> means, pyublas::numpy_array<float> covars) {
-     components.pi = weights.data();
-     components.means = means.data();
-     components.R = covars.data();
+void relink_components_on_CPU(pyublas::numpy_vector<float> weights, pyublas::numpy_vector<float> means, pyublas::numpy_vector<float> covars) {
+     components.pi = weights.data().data();
+     components.means = means.data().data();
+     components.R = covars.data().data();
 }
 
 // ================== Cluster data allocation on CPU  ================= :
 
-void alloc_components_on_CPU(int original_num_components, int num_dimensions, pyublas::numpy_array<float> weights, pyublas::numpy_array<float> means, pyublas::numpy_array<float> covars) {
+void alloc_components_on_CPU(int original_num_components, int num_dimensions, pyublas::numpy_vector<float> weights, pyublas::numpy_vector<float> means, pyublas::numpy_vector<float> covars) {
 
   //printf("Alloc components on CPU\n");
   
   //components.pi = (float*) malloc(sizeof(float)*original_num_components);
   //components.means = (float*) malloc(sizeof(float)*num_dimensions*original_num_components);   
   //components.R = (float*) malloc(sizeof(float)*num_dimensions*num_dimensions*original_num_components);
-  components.pi = weights.data();
-  components.means = means.data();
-  components.R = covars.data();
+  components.pi = weights.data().data();
+  components.means = means.data().data();
+  components.R = covars.data().data();
 
   components.N = (float*) malloc(sizeof(float)*original_num_components);      
   components.constant = (float*) malloc(sizeof(float)*original_num_components);
@@ -202,9 +202,9 @@ void alloc_components_on_GPU(int original_num_components, int num_dimensions) {
 
 // ================= Eval data alloc on CPU and GPU =============== 
 
-void alloc_evals_on_CPU(pyublas::numpy_array<float> component_mem_np_arr, pyublas::numpy_array<float> loglikelihoods_np_arr){
-  component_memberships = component_mem_np_arr.data();
-  loglikelihoods = loglikelihoods_np_arr.data();
+void alloc_evals_on_CPU(pyublas::numpy_vector<float> component_mem_np_arr, pyublas::numpy_vector<float> loglikelihoods_np_arr){
+  component_memberships = component_mem_np_arr.data().data();
+  loglikelihoods = loglikelihoods_np_arr.data().data();
 }
 
 void alloc_evals_on_GPU(int num_events, int num_components){

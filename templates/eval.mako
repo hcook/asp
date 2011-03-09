@@ -3,7 +3,7 @@ float eval${'_'+'_'.join(param_val_list)} (
                              int num_components, 
                              int num_dimensions, 
                              int num_events, 
-                             pyublas::numpy_array<float> obs_data ) 
+                             pyublas::numpy_vector<float> obs_data ) 
 {
   float likelihood;
   float* likelihoods = (float*) malloc(sizeof(float)*${num_blocks_estep});
