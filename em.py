@@ -190,6 +190,11 @@ class GMM(object):
     #Called the first time a GMM instance tries to use a GPU utility function
     def initialize_gpu_util_mod(self):
         GMM.gpu_util_mod = asp_module.ASPModule(use_cuda=True)
+	GMM.gpu_util_mod.toolchain.cc = 'gcc'
+	GMM.gpu_util_mod.toolchain.cflags.append('-fPIC')
+        nvcc_toolchain = GMM.gpu_util_mod.nvcc_toolchain
+        nvcc_toolchain.cflags.extend(["-Xcompiler","-fPIC"])
+        nvcc_toolchain.add_library("project",['.','./include'],[],[])
         #TODO: Figure out what kind of file to put this in
         #TODO: Or, redo these using more robust functionality stolen from PyCuda
         util_funcs = [ ("""
@@ -381,8 +386,10 @@ class GMM(object):
             return join(pathname, "core", "include")
 
         GMM.asp_mod.toolchain.add_library("project",['.','./include',pyublas_inc(),numpy_inc()],[],[])
+	GMM.asp_mod.toolchain.cc = 'gcc'
+	GMM.asp_mod.toolchain.cflags.append('-fPIC')
         nvcc_toolchain = GMM.asp_mod.nvcc_toolchain
-        nvcc_toolchain.cflags += ["-arch=sm_%s%s" % self.capability ]
+        nvcc_toolchain.cflags.extend(['-Xcompiler', '-fPIC', '-arch=sm_%s%s' % self.capability ])
         nvcc_toolchain.add_library("project",['.','./include'],[],[])
         
         #print GMM.asp_mod.module.generate()
