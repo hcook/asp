@@ -67,7 +67,10 @@ class EMTester(object):
             for i, (mean, covar, color) in enumerate(zip(r[1], r[2], color_iter)):
                 v, w = np.linalg.eigh(covar)
                 u = w[0] / np.linalg.norm(w[0])
-                pl.scatter(self.X.T[0,Y_==i], self.X.T[1,Y_==i], .8, color=color)
+                try:
+                    pl.scatter(self.X.T[0,Y_==i], self.X.T[1,Y_==i], .8, color=color)
+                except ValueError:
+                    print "Probably scatter() is angry because one of the mixtures was responsible for no points"
                 angle = np.arctan(u[1]/u[0])
                 angle = 180 * angle / np.pi
                 ell = mpl.patches.Ellipse (mean, v[0], v[1], 180 + angle, color=color)
