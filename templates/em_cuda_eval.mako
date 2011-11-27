@@ -8,7 +8,7 @@ void em_cuda_eval${'_'+'_'.join(param_val_list)} (
   constants_kernel_launch${'_'+'_'.join(param_val_list)}(d_components,num_components,num_dimensions);
   cudaThreadSynchronize();
   CUT_CHECK_ERROR("Constants Kernel execution failed: ");
-  estep1_launch${'_'+'_'.join(param_val_list)}(d_fcs_data_by_dimension,d_components, d_component_memberships, num_dimensions,num_components,num_events,d_loglikelihoods, d_temploglikelihoods);
+  estep1_launch${'_'+'_'.join(param_val_list)}(d_fcs_data_by_dimension,d_components, d_component_memberships, num_dimensions,num_components,num_events,d_loglikelihoods);
   cudaThreadSynchronize();
   CUT_CHECK_ERROR("Kernel execution failed");
 

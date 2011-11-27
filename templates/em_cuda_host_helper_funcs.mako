@@ -35,7 +35,6 @@ components_t* d_components;
 //GPU copies of eval data
 float *d_component_memberships;
 float *d_loglikelihoods;
-float *d_temploglikelihoods;
 
 //Copy functions to ensure CPU data structures are up to date
 void copy_component_data_GPU_to_CPU(int num_components, int num_dimensions);
@@ -91,7 +90,6 @@ void alloc_components_on_GPU(int original_num_components, int num_dimensions) {
 void alloc_evals_on_GPU(int num_events, int num_components){
   CUDA_SAFE_CALL(cudaMalloc((void**) &(d_component_memberships),sizeof(float)*num_events*num_components));
   CUDA_SAFE_CALL(cudaMalloc((void**) &(d_loglikelihoods),sizeof(float)*num_events));
-  CUDA_SAFE_CALL(cudaMalloc((void**) &(d_temploglikelihoods),sizeof(float)*num_events*num_components));
   CUT_CHECK_ERROR("Alloc eval data on GPU failed: ");
 }
 
@@ -150,7 +148,6 @@ void copy_component_data_GPU_to_CPU(int num_components, int num_dimensions) {
 // ======================== Copy eval data GPU <==> CPU ================
 void copy_evals_CPU_to_GPU(int num_events, int num_components) {
   CUDA_SAFE_CALL(cudaMemcpy( d_loglikelihoods, loglikelihoods, sizeof(float)*num_events,cudaMemcpyHostToDevice) );
-  CUDA_SAFE_CALL(cudaMemcpy( d_temploglikelihoods, temploglikelihoods, sizeof(float)*num_events*num_components,cudaMemcpyHostToDevice) );
   CUDA_SAFE_CALL(cudaMemcpy( d_component_memberships, component_memberships, sizeof(float)*num_events*num_components,cudaMemcpyHostToDevice) );
   CUT_CHECK_ERROR("Copy eval data from CPU to GPU execution failed: ");
 }
@@ -158,7 +155,6 @@ void copy_evals_CPU_to_GPU(int num_events, int num_components) {
 void copy_evals_data_GPU_to_CPU(int num_events, int num_components){
   CUDA_SAFE_CALL(cudaMemcpy(component_memberships, d_component_memberships, sizeof(float)*num_events*num_components, cudaMemcpyDeviceToHost));
   CUDA_SAFE_CALL(cudaMemcpy(loglikelihoods, d_loglikelihoods, sizeof(float)*num_events, cudaMemcpyDeviceToHost));
-  CUDA_SAFE_CALL(cudaMemcpy(temploglikelihoods, d_temploglikelihoods, sizeof(float)*num_events*num_components, cudaMemcpyDeviceToHost));
   CUT_CHECK_ERROR("Copy eval data from GPU to CPU execution failed: ");
 }
 
@@ -192,7 +188,6 @@ void dealloc_components_on_GPU() {
 void dealloc_evals_on_GPU() {
   CUDA_SAFE_CALL(cudaFree(d_component_memberships));
   CUDA_SAFE_CALL(cudaFree(d_loglikelihoods));
-  CUDA_SAFE_CALL(cudaFree(d_temploglikelihoods));
   CUT_CHECK_ERROR("Dealloc eval data on GPU failed: ");
 }
 
