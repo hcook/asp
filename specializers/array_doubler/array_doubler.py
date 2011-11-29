@@ -7,13 +7,13 @@ class ArrayDoubler(object):
 
     def double_using_template(self, arr):
         import asp.codegen.templating.template as template
-        mytemplate = template.Template(filename="templates/double_template.mako")
+        mytemplate = template.Template(filename="templates/double_template.mako", disable_unicode=True)
         rendered = mytemplate.render(num_items=len(arr))
 
         import asp.jit.asp_module as asp_module
         mod = asp_module.ASPModule()
         # remember, must specify function name when using a string
-        mod.add_function(rendered, fname="double_in_c")
+        mod.add_function("double_in_c", rendered)
         return mod.double_in_c(arr)
 
     def double(self, arr):
