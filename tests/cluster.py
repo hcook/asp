@@ -12,115 +12,94 @@ import scipy.stats.mstats as stats
 import ConfigParser
 import os.path
 import getopt
+import h5py
 
 from em import *
 
 
 MINVALUEFORMINUSLOG = -1000.0
 
-def generate_synthetic_data(N):
-    np.random.seed(0)
-    C = np.array([[0., -0.7], [3.5, .7]])
-    C1 = np.array([[-0.4, 1.7], [0.3, .7]])
-    Y = np.r_[
-        np.dot(np.random.randn(N/3, 2), C1),
-        np.dot(np.random.randn(N/3, 2), C),
-        np.random.randn(N/3, 2) + np.array([3, 3]),
-        ]
-    return Y.astype(np.float32)
+class Diarizer(object):
 
-class EMTester(object):
+    def __init__(self, f_file_name, sp_file_name):
+        #self.variant_param_spaces = variant_param_spaces
+        #self.device_id = device_id
+        #self.names_of_backends = names_of_backends
 
-    def __init__(self, from_file, f_file_name, sp_file_name, variant_param_spaces, device_id, num_subps, names_of_backends):
-        self.results = {}
-        self.variant_param_spaces = variant_param_spaces
-        self.device_id = device_id
-        self.num_subplots = num_subps
-        self.names_of_backends = names_of_backends
-        self.plot_id = num_subps/2*100 + 21
+        f = open(f_file_name, "rb")
 
-        if from_file:
+        print "...Reading in HTK feature file..."
+        
+        #=== Read Feature File ==
+        try:
+            nSamples = struct.unpack('>i', f.read(4))[0]
+            sampPeriod = struct.unpack('>i', f.read(4))[0]
+            sampSize = struct.unpack('>h', f.read(2))[0]
+            sampKind = struct.unpack('>h', f.read(2))[0]
 
-            f = open(f_file_name, "rb")
-
-            print "Reading in HTK feature file..."
-
-            #=== Read Feature File ==
-            try:
-                nSamples = struct.unpack('>i', f.read(4))[0]
-                sampPeriod = struct.unpack('>i', f.read(4))[0]
-                sampSize = struct.unpack('>h', f.read(2))[0]
-                sampKind = struct.unpack('>h', f.read(2))[0]
-
-                print "Total number of frames read: ", nSamples
-                self.total_num_frames = nSamples
+            print "INFO: total number of frames read: ", nSamples
+            self.total_num_frames = nSamples
                 
-                D = sampSize/4 #dimension of feature vector
-                l = []
-                count = 0
-                while count < (nSamples * D):
-                    bFloat = f.read(4)
-                    fl = struct.unpack('>f', bFloat)[0]
-                    l.append(fl)
-                    count = count + 1
-            finally:
-                f.close()
+            D = sampSize/4 #dimension of feature vector
+            l = []
+            count = 0
+            while count < (nSamples * D):
+                bFloat = f.read(4)
+                fl = struct.unpack('>f', bFloat)[0]
+                l.append(fl)
+                count = count + 1
+        finally:
+            f.close()
 
-            #=== Prune to Speech Only ==
-            print "Reading in speech/nonspeech file..."
-            pruned_list = []
-            num_speech_frames = nSamples            
+        #=== Prune to Speech Only ==
+        print "...Reading in speech/nonspeech file..."
+        pruned_list = []
+        num_speech_frames = nSamples            
 
-            if sp_file_name:
-                sp = open(sp_file_name, "r")
+        if sp_file_name:
+            sp = open(sp_file_name, "r")
                         
-                l_start = []
-                l_end = []
-                num_speech_frames = 0
-                for line in sp:
-                    s = line.split(' ')
-                    st = math.floor(100 * float(s[2]) + 0.5)
-                    en = math.floor(100 * float(s[3].replace('\n','')) + 0.5)
-                    st1 = int(st)
-                    en1 = int(en)
-                    l_start.append(st1*19)
-                    l_end.append(en1*19)
-                    num_speech_frames = num_speech_frames + (en1 - st1 + 1)
+            l_start = []
+            l_end = []
+            num_speech_frames = 0
+            for line in sp:
+                s = line.split(' ')
+                st = math.floor(100 * float(s[2]) + 0.5)
+                en = math.floor(100 * float(s[3].replace('\n','')) + 0.5)
+                st1 = int(st)
+                en1 = int(en)
+                l_start.append(st1*19)
+                l_end.append(en1*19)
+                num_speech_frames = num_speech_frames + (en1 - st1 + 1)
 
-                print "Total number of speech frames: ", num_speech_frames
+            print "INFO: total number of speech frames: ", num_speech_frames
 
-                total = 0
-                for start in l_start:
-                    end = l_end[l_start.index(start)]
-                    total += (end/19 - start/19 + 1)
-                    x = 0
-                    index = start
-                    while x < (end-start+19):
-                        pruned_list.append(l[index])
-                        index += 1
-                        x += 1
-            else: #no speech file, take in all features
-                pruned_list = l
+            total = 0
+            for start in l_start:
+                end = l_end[l_start.index(start)]
+                total += (end/19 - start/19 + 1)
+                x = 0
+                index = start
+                while x < (end-start+19):
+                    pruned_list.append(l[index])
+                    index += 1
+                    x += 1
+        else: #no speech file, take in all features
+            pruned_list = l
 
-            floatArray = np.array(pruned_list, dtype = np.float32)
-            self.X = floatArray.reshape(num_speech_frames, D)
-            
-            self.N = self.X.shape[0]
-            self.D = self.X.shape[1]
-
-        else:
-            N = 1000
-            self.X = generate_synthetic_data(N)
-            self.N = self.X.shape[0]
-            self.D = self.X.shape[1]
+        floatArray = np.array(pruned_list, dtype = np.float32)
+        self.X = floatArray.reshape(num_speech_frames, D)
+        
+        self.N = self.X.shape[0]
+        self.D = self.X.shape[1]
 
 
-    def write_to_RTTM(self, rttm_file_name, sp_file_name, meeting_name, most_likely, num_gmms):
+    def write_to_RTTM(self, rttm_file_name, sp_file_name, meeting_name, most_likely, num_gmms, seg_length):
 
-        print "Writing out RTTM file..."
+        print "...Writing out RTTM file..."
 
         #do majority voting in chunks of 250
-        duration = 250
+        duration = seg_length
         chunk = 0
         end_chunk = duration
 
@@ -223,8 +202,8 @@ class EMTester(object):
 
             gmm_count = 0
             for g in range(0, gmm.M):
-                g_means = means[range(gmm_count*gmm.D, gmm_count*gmm.D+gmm.D)]
-                g_covar_full = np.array(covars[range(gmm_count*gmm.D*gmm.D, gmm_count*gmm.D*gmm.D + gmm.D*gmm.D)]).reshape(gmm.D, gmm.D)
+                g_means = means[gmm_count]
+                g_covar_full = covars[gmm_count]
                 g_covar = np.diag(g_covar_full)
                 g_weight = weights[gmm_count]
 
@@ -242,12 +221,12 @@ class EMTester(object):
         
     def new_gmm(self, M):
         self.M = M
-        self.gmm = GMM(self.M, self.D, names_of_backends_to_use=self.names_of_backends, variant_param_spaces=self.variant_param_spaces, device_id=self.device_id)
+        self.gmm = GMM(self.M, self.D)
 
     def new_gmm_list(self, M, k):
         self.M = M
         self.init_num_clusters = k
-        self.gmm_list = [GMM(self.M, self.D, names_of_backends_to_use=self.names_of_backends, variant_param_spaces=self.variant_param_spaces, device_id=self.device_id) for i in range(k)]
+        self.gmm_list = [GMM(self.M, self.D) for i in range(k)]
 
 
 
@@ -282,7 +261,8 @@ class EMTester(object):
         
         iter_bic_dict = {}
         iter_bic_list = []
-        
+
+        # for each gmm, append all the segments and retrain
         for gp, data_list in iter_training.iteritems():
             g = gp[0]
             p = gp[1]
@@ -290,7 +270,6 @@ class EMTester(object):
 
             for d in data_list[1:]:
                 cluster_data = np.concatenate((cluster_data, d))
-            #cluster_data = np.ascontiguousarray(cluster_data)
 
             g.train(cluster_data)
 
@@ -299,55 +278,10 @@ class EMTester(object):
 
         return iter_bic_dict, iter_bic_list, most_likely
 
-    def segment_majority_vote_indices(self, interval_size):
-        
-        num_clusters = len(self.gmm_list)
-
-        # Resegment data based on likelihood scoring
-        likelihoods = self.gmm_list[0].score(self.X)
-        for g in self.gmm_list[1:]:
-            likelihoods = np.column_stack((likelihoods, g.score(self.X)))
-
-        if num_clusters == 1:
-            most_likely = np.zeros(len(self.X))
-        else:
-            most_likely = likelihoods.argmax(axis=1)
-
-        # Across 2.5 secs of observations, vote on which cluster they should be associated with
-
-        iter_training = {}
-        
-        for i in range(interval_size, self.N, interval_size):
-        
-            arr = np.array(most_likely[(range(i-interval_size, i))])
-            max_gmm = int(stats.mode(arr)[0][0])
-            iter_training.setdefault((self.gmm_list[max_gmm],max_gmm),[]).append((i-interval_size,i))
-
-        arr = np.array(most_likely[(range((self.N/interval_size)*interval_size, self.N))])
-        max_gmm = int(stats.mode(arr)[0][0])
-        iter_training.setdefault((self.gmm_list[max_gmm], max_gmm),[]).append((self.N/interval_size*interval_size, self.N))
-
-        iter_bic_dict = {}
-        iter_bic_list = []
-
-        for gp, e_tuple_list in iter_training.iteritems():
-            g = gp[0]
-            p = gp[1]
-
-            cluster_indices =  np.array(range(e_tuple_list[0][0], e_tuple_list[0][1],1), dtype=np.int32)
-            for d in e_tuple_list[1:]:
-                cluster_indices = np.concatenate((cluster_indices, np.array(range(d[0],d[1],1),dtype=np.int32)))
-
-            g.train_on_subset(self.X,cluster_indices)
-            
-            iter_bic_list.append((g,cluster_indices))
-            iter_bic_dict[p] = cluster_indices
-
-        return iter_bic_dict, iter_bic_list, most_likely
 
     def cluster(self, KL_ntop, NUM_SEG_LOOPS_INIT, NUM_SEG_LOOPS, seg_length):
 
-        print "CLUSTERING"
+        print " ====================== CLUSTERING ====================== "
         main_start = time.time()
 
         # ----------- Uniform Initialization -----------
@@ -375,7 +309,7 @@ class EMTester(object):
             total_loops+=1
             for segment_iter in range(0,NUM_SEG_LOOPS):
                 iter_bic_dict, iter_bic_list, most_likely = self.segment_majority_vote(seg_length)
-
+                            
             # Score all pairs of GMMs using BIC
             best_merged_gmm = None
             best_BIC_score = 0.0
@@ -386,7 +320,6 @@ class EMTester(object):
             if KL_ntop > 0:
 
                 top_K_gmm_pairs = self.gmm_list[0].find_top_KL_pairs(KL_ntop, self.gmm_list)
-                
                 for pair in top_K_gmm_pairs:
                     score = 0.0
                     gmm1idx = pair[0]
@@ -435,7 +368,6 @@ class EMTester(object):
                             best_BIC_score = score
 
             # Merge the winning candidate pair if its deriable to do so
-   
             if best_BIC_score > 0.0:
                 gmms_with_events = []
                 for gp in iter_bic_list:
@@ -460,113 +392,11 @@ class EMTester(object):
 
         return most_likely
 
-    def cluster_on_subset(self, KL_ntop, NUM_SEG_LOOPS_INIT, NUM_SEG_LOOPS, seg_length):
-
-        print "CLUSTERING ON SUBSET"
-        main_start = time.time()
-
-        # ----------- Uniform Initialization -----------
-        # Get the events, divide them into an initial k clusters and train each GMM on a cluster
-        per_cluster = self.N/self.init_num_clusters
-        init_training = zip(self.gmm_list,np.vsplit(self.X, range(per_cluster, self.N, per_cluster)))
-
-        for g, x in init_training:
-            g.train(x)
-
-        # ----------- First majority vote segmentation loop ---------
-        for segment_iter in range(0,NUM_SEG_LOOPS_INIT):
-            iter_bic_dict, iter_bic_list, most_likely = self.segment_majority_vote_indices(seg_length)
-
-
-        # ----------- Main Clustering Loop using BIC ------------
-
-        # Perform hierarchical agglomeration based on BIC scores
-        best_BIC_score = 1.0
-        total_events = 0
-        total_loops = 0
-        
-        while (best_BIC_score > 0 and len(self.gmm_list) > 1):
-
-            for segment_iter in range(0,NUM_SEG_LOOPS):
-                iter_bic_dict, iter_bic_list, most_likely = self.segment_majority_vote_indices(seg_length)
-
-            # Score all pairs of GMMs using BIC
-            best_merged_gmm = None
-            best_BIC_score = 0.0
-            merged_tuple = None
-            merged_tuple_indices = None
-
-            # ------- KL distance to compute best pairs to merge -------
-            if KL_ntop > 0:
-
-                top_K_gmm_pairs = self.gmm_list[0].find_top_KL_pairs(KL_ntop, self.gmm_list)
-                
-                for pair in top_K_gmm_pairs:
-                    score = 0.0
-                    gmm1idx = pair[0]
-                    gmm2idx = pair[1]
-                    g1 = self.gmm_list[gmm1idx]
-                    g2 = self.gmm_list[gmm2idx]
-
-                    if gmm1idx in iter_bic_dict and gmm2idx in iter_bic_dict:
-                        i1 = iter_bic_dict[gmm1idx]
-                        i2 = iter_bic_dict[gmm2idx]
-                        indices = np.concatenate((i1,i2))
-                    elif gmm1idx in iter_bic_dict:
-                        indices = iter_bic_dict[gmm1idx]
-                    elif gmm2idx in iter_bic_dict:
-                        indices = iter_bic_dict[gmm2idx]
-                    else:
-                        continue
-
-                    new_gmm, score = compute_distance_BIC_indices(g1, g2, self.X, indices)
-                    
-                    #print "Comparing BIC %d with %d: %f" % (gmm1idx, gmm2idx, score)
-                    if score > best_BIC_score: 
-                        best_merged_gmm = new_gmm
-                        merged_tuple = (g1, g2)
-                        merged_tuple_indices = (gmm1idx, gmm2idx)
-                        best_BIC_score = score
-
-            # ------- All-to-all comparison of gmms to merge -------
-            else: 
-                l = len(iter_bic_list)
-
-                for gmm1idx in range(l):
-                    for gmm2idx in range(gmm1idx+1, l):
-                        score = 0.0
-                        g1, i1 = iter_bic_list[gmm1idx]
-                        g2, i2 = iter_bic_list[gmm2idx] 
-
-                        indices = np.concatenate((i1,i2))
-                        new_gmm, score = compute_distance_BIC_indices(g1, g2, self.X, indices)
-                                                
-                        #print "Comparing BIC %d with %d: %f" % (gmm1idx, gmm2idx, score)
-                        if score > best_BIC_score: 
-                            best_merged_gmm = new_gmm
-                            merged_tuple = (g1, g2)
-                            merged_tuple_indices = (gmm1idx, gmm2idx)
-                            best_BIC_score = score
-
-            # Merge the winning candidate pair if its deriable to do so
-
-            if best_BIC_score > 0.0:
-                self.gmm_list.remove(merged_tuple[0])
-                self.gmm_list.remove(merged_tuple[1])
-                self.gmm_list.append(best_merged_gmm)
-                
-            print " size of each cluster:", [ g.M for g in self.gmm_list]
-
-        print "=== Total clustering time: ", time.time()-main_start
-        print "=== Final size of each cluster:", [ g.M for g in self.gmm_list]
-
-        return most_likely
-
     
 def print_usage():
-        print """    ---------------------------------------------
-    Speaker Diarization in Python with ASP usage:
-    ---------------------------------------------
+        print """    ---------------------------------------------------------------------
+    Speaker Diarization in Python with Asp and the GMM Specializer usage:
+    ---------------------------------------------------------------------
     Arguments for the diarizer are parsed from a config file. 
     Default config file is diarizer.cfg, but you can pass your own file with the '-c' option. 
     Required is the config file header: [Diarizer] and the options are as follows:
@@ -588,6 +418,8 @@ def print_usage():
                         \t in the initialization phase (2 by default)
     num_seg_iters: \t Number of majority vote iterations
                    \t in the main loop (3 by default)
+    seg_length: \t Segment length for majority vote in frames
+                \t (250 frames by default)
 
     For fastest performance, enable KL-divergency (KL_ntop = 3) and set
       \t num_seg_iters_init and num_seg_iters to 1
@@ -676,8 +508,7 @@ def get_config_params(config):
 if __name__ == '__main__':
     device_id = 0
     
-    #----- Main Clustering Script ----
-
+    
     # Process commandline arguments
     try:
         opts, args = getopt.getopt(sys.argv[1:], "c:", ["help"])
@@ -713,32 +544,16 @@ if __name__ == '__main__':
     config.read(config_file)
 
     meeting_name, f, sp, outfile, gmmfile, num_gmms, num_comps, num_em_iters, kl_ntop, num_seg_iters_init, num_seg_iters, seg_length = get_config_params(config)
-    variant_param_spaces = {'base': {},
-                            'cuda_boost': {'num_blocks_estep': ['16'],
-                                           'num_threads_estep': ['512'],
-                                           'num_threads_mstep': ['512'],
-                                           'num_event_blocks': ['128'],
-                                           'max_num_dimensions': ['60'],
-                                           'max_num_components': ['1024'],
-                                           'max_num_dimensions_covar_v3': ['40'],
-                                           'max_num_components_covar_v3': ['82'],
-                                           'diag_only': ['1'],
-                                           'max_iters': [num_em_iters],
-                                           'min_iters': ['1'],
-                                           #'covar_version_name': ['V1', 'V2A', 'V2B', 'V3'] },
-                                           'covar_version_name': ['V1'] },
-                            'cilk_boost': {
-                                'diag_only': ['1'],
-                                'max_iters': [num_em_iters],
-                                'min_iters': ['1'] }
-                            }
 
-    emt = EMTester(True, f, sp, variant_param_spaces, device_id, 0, ['cuda'])
-    emt.new_gmm_list(num_comps, num_gmms)
-    most_likely = emt.cluster(kl_ntop, num_seg_iters_init, num_seg_iters, seg_length)
-    #emt.new_gmm_list(num_comps, num_gmms)
-    #most_likely = emt.cluster_on_subset(kl_ntop, num_seg_iters_init, num_seg_iters, seg_length)
-    emt.write_to_RTTM(outfile, sp, meeting_name, most_likely, num_gmms)
-    emt.write_to_GMM(gmmfile)
+    # Create tester object
+    diarizer = Diarizer(f, sp)
+    # Create the GMM list
+    diarizer.new_gmm_list(num_comps, num_gmms)
+    # Cluster
+    most_likely = diarizer.cluster(kl_ntop, num_seg_iters_init, num_seg_iters, seg_length)
+
+    # Write out RTTM and GMM parameter files
+    diarizer.write_to_RTTM(outfile, sp, meeting_name, most_likely, num_gmms, seg_length)
+    diarizer.write_to_GMM(gmmfile)
 
 

@@ -149,12 +149,13 @@ void copy_component_data_GPU_to_CPU(int num_components, int num_dimensions) {
 void copy_evals_CPU_to_GPU(int num_events, int num_components) {
   CUDA_SAFE_CALL(cudaMemcpy( d_loglikelihoods, loglikelihoods, sizeof(float)*num_events,cudaMemcpyHostToDevice) );
   CUDA_SAFE_CALL(cudaMemcpy( d_component_memberships, component_memberships, sizeof(float)*num_events*num_components,cudaMemcpyHostToDevice) );
-  CUT_CHECK_ERROR("Copy eval data from CPU to GPU execution failed: ");
+   CUT_CHECK_ERROR("Copy eval data from CPU to GPU execution failed: ");
 }
 
 void copy_evals_data_GPU_to_CPU(int num_events, int num_components){
   CUDA_SAFE_CALL(cudaMemcpy(component_memberships, d_component_memberships, sizeof(float)*num_events*num_components, cudaMemcpyDeviceToHost));
   CUDA_SAFE_CALL(cudaMemcpy(loglikelihoods, d_loglikelihoods, sizeof(float)*num_events, cudaMemcpyDeviceToHost));
+  //  CUDA_SAFE_CALL(cudaMemcpy(likelihoods, d_likelihoods, sizeof(float)*num_events, cudaMemcpyDeviceToHost));
   CUT_CHECK_ERROR("Copy eval data from GPU to CPU execution failed: ");
 }
 

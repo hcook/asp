@@ -11,10 +11,25 @@ __device__ void invert${'_'+'_'.join(param_val_list)}(float* data, int actualsiz
   int num_threads = blockDim.x;
   int num_dimensions = actualsize;
   int row, col;
-  
+
+#if ${diag_only}
+  if(threadIdx.x == 0) {
+    *log_determinant = 0.0f;
+    for(int d = 0; d < num_dimensions*num_dimensions; d++) {
+      row = (d) / num_dimensions;
+      col = (d) % num_dimensions;
+      if(row == col) { //diag only
+        *log_determinant += logf(data[row*num_dimensions+col]);
+        data[row*num_dimensions+col] = 1.0f/data[row*num_dimensions+col];
+      }
+    }
+  }
+
+#else
    
   if(threadIdx.x == 0) {
     *log_determinant = 0.0f;
+    
     // sanity check
     if (actualsize == 1) {
       *log_determinant = logf(data[0]);
@@ -69,7 +84,10 @@ __device__ void invert${'_'+'_'.join(param_val_list)}(float* data, int actualsiz
           data[j*maxsize+i] = sum;
         }
     }
+
   }
+
+  #endif
 }
 
 
@@ -178,7 +196,8 @@ __device__ void compute_constants${'_'+'_'.join(param_val_list)}(components_t* c
     // Equivilent to: log(1/((2*PI)^(M/2)*det(R)^(1/2)))
     // This constant is used in all E-step likelihood calculations
     if(tid == 0) {
-        components->constant[c] = -num_dimensions*0.5*logf(2*PI) - 0.5*log_determinant;
+      components->constant[c] = -num_dimensions*0.5*logf(2*PI) - 0.5*log_determinant;
+      components->CP[c] = components->constant[c] * 2;
     }
 }
 
@@ -302,7 +321,7 @@ __device__ void compute_indices${'_'+'_'.join(param_val_list)}(int num_events, i
 }
 
 __global__ void
-estep1${'_'+'_'.join(param_val_list)}(float* fcs_data, components_t* components, float *component_memberships, int num_dimensions, int num_events) {
+estep1${'_'+'_'.join(param_val_list)}(float* fcs_data, components_t* components, float *component_memberships, int num_dimensions, int num_events, float* loglikelihoods) {
     
     // Cached component parameters
   __shared__ float means[${max_num_dimensions}];
@@ -351,6 +370,15 @@ estep1${'_'+'_'.join(param_val_list)}(float* fcs_data, components_t* components,
     // Sync to wait for all params to be loaded to shared memory
     __syncthreads();
     
+    if(blockIdx.y == 0) {
+      for(int event=start_index; event<end_index; event += ${num_threads_estep}) {
+        loglikelihoods[event] = 0.0f; 
+      }
+    }
+
+    __syncthreads();
+
+    
     for(int event=start_index; event<end_index; event += ${num_threads_estep}) {
       like = 0.0f;
         // this does the loglikelihood calculation
@@ -367,9 +395,11 @@ estep1${'_'+'_'.join(param_val_list)}(float* fcs_data, components_t* components,
     
             }
 #endif
-
-            component_memberships[c*num_events+event] = -0.5f * like + constant + logf(component_pi); // numerator of the probability computation
-
+            if(component_pi > 0.0f) {
+              component_memberships[c*num_events+event] = -0.5 *like  + constant + logf(component_pi); // numerator of the probability computation
+            } else {
+              component_memberships[c*num_events+event] = MINVALUEFORMINUSLOG; // numerator of the probability computation
+            }
     }
 
 }
@@ -377,20 +407,19 @@ estep1${'_'+'_'.join(param_val_list)}(float* fcs_data, components_t* components,
 __global__ void
 estep1_log_add${'_'+'_'.join(param_val_list)}(int num_events, int num_components, float* loglikelihoods, float *component_memberships) {
 
-  int tid = threadIdx.x;
+    int tid = threadIdx.x;
+    
+    for(int event=tid; event<num_events; event += ${num_threads_estep}) {
 
-  for(int event=tid; event<num_events; event += ${num_threads_estep}) {
+      float log_lkld = MINVALUEFORMINUSLOG;
+      for(int c = 0; c<num_components; c++) {
+        log_lkld = log_add(log_lkld, component_memberships[c*num_events+event]);
+      }
 
-    float log_lkld = MINVALUEFORMINUSLOG;
-    for(int c = 0; c<num_components; c++) {
-      log_lkld = log_add(log_lkld, component_memberships[c*num_events+event]);
+      loglikelihoods[event] = log_lkld;
     }
-
-    loglikelihoods[event] = log_lkld;
-  }
-                                             }
-
-
+}
+    
 __global__ void
 estep2${'_'+'_'.join(param_val_list)}(float* fcs_data, components_t* components, float* component_memberships, int num_dimensions, int num_components, int num_events, float* likelihood) {
     float temp;
@@ -446,6 +475,7 @@ estep2${'_'+'_'.join(param_val_list)}(float* fcs_data, components_t* components,
         component_memberships[c*num_events+pixel] = expf(component_memberships[c*num_events+pixel] - temp);
 
       }
+      
     }
 
     __syncthreads();
@@ -554,14 +584,6 @@ mstep_N${'_'+'_'.join(param_val_list)}(float* fcs_data, components_t* components
 
     // NEW COMPUTE AVERAGE COVAR
     __shared__ float avgvar;
-
-/*     __shared__ float means[${max_num_dimensions}]; */
-
-/*     if(tid < num_dimensions) { */
-/*         means[tid] = components->means[c*num_dimensions+tid]; */
-/*     } */
-    
-/*     __syncthreads(); */
 
     // Need to store the sum computed by each thread so in the end
     // a single thread can reduce to get the final sum
@@ -853,7 +875,6 @@ mstep_covariance_idx${'_'+'_'.join(param_val_list)}(float* fcs_data, int* indice
 
       event = indices[index];
       cov_sum += (fcs_data[event*num_dimensions+row]-means[row])*(fcs_data[event*num_dimensions+col]-means[col])*component_memberships[c*num_events+event];      
-      //cov_sum += (fcs_data[event*num_dimensions+row]-means[row])*(fcs_data[event*num_dimensions+col]-means[col])*clusters->memberships[c*num_events+event];
     }
 
     __syncthreads();
@@ -1285,7 +1306,6 @@ mstep_covariance_transpose${'_'+'_'.join(param_val_list)}(float* fcs_data, compo
 void seed_components_launch${'_'+'_'.join(param_val_list)}(float* d_fcs_data_by_event, components_t* d_components, int num_dimensions, int num_components, int num_events)
 {
   seed_components${'_'+'_'.join(param_val_list)}<<< 1, ${num_threads_estep}>>>( d_fcs_data_by_event, d_components, num_dimensions, num_components, num_events);
-   cudaThreadSynchronize();
 
 }
 
@@ -1299,7 +1319,7 @@ void compute_average_variance_launch${'_'+'_'.join(param_val_list)}(float* d_fcs
 
 void estep1_launch${'_'+'_'.join(param_val_list)}(float* d_fcs_data_by_dimension, components_t* d_components, float* d_component_memberships, int num_dimensions, int num_components, int num_events, float* d_loglikelihoods)
 {
-  estep1${'_'+'_'.join(param_val_list)}<<<dim3(${num_blocks_estep},num_components), ${num_threads_estep}>>>(d_fcs_data_by_dimension,d_components,d_component_memberships,num_dimensions,num_events);
+  estep1${'_'+'_'.join(param_val_list)}<<<dim3(${num_blocks_estep},num_components), ${num_threads_estep}>>>(d_fcs_data_by_dimension,d_components,d_component_memberships,num_dimensions,num_events, d_loglikelihoods);
 
   //new step to log add the component log probabilities
   estep1_log_add${'_'+'_'.join(param_val_list)}<<<1, ${num_threads_estep}>>>(num_events, num_components, d_loglikelihoods, d_component_memberships);
@@ -1353,66 +1373,4 @@ void constants_kernel_launch${'_'+'_'.join(param_val_list)}(components_t* d_comp
 {
   constants_kernel${'_'+'_'.join(param_val_list)}<<<num_components, ${num_threads_mstep}>>>(d_components,num_components,num_dimensions);
 }
-
-
-/* __global__ void */
-/* seed_components( float* fcs_data, components_t* components, int num_dimensions, int num_components, int num_events) */
-/* { */
-/*   // access thread id */
-/*   int tid = threadIdx.x; */
-/*   // access number of threads in this block */
-/*   int num_threads = blockDim.x; */
-
-/*   // shared memory */
-/*   __shared__ float means[${max_num_dimensions}]; */
-
-/*   // Compute the means */
-/*   mvtmeans(fcs_data, num_dimensions, num_events, means); */
-
-/*   __syncthreads(); */
-
-/*   __shared__ float avgvar; */
-
-/*   // Compute the average variance */
-/*   average_variance${'_'+'_'.join(param_val_list)}(fcs_data, means, num_dimensions, num_events, &avgvar); */
-
-/*   int num_elements; */
-/*   int row, col; */
-
-/*   // Number of elements in the covariance matrix */
-/*   num_elements = num_dimensions*num_dimensions; */
-
-/*   __syncthreads(); */
-
-/*   float seed; */
-/*   if(num_components > 1) { */
-/*     seed = (num_events-1.0f)/(num_components-1.0f); */
-/*   } else { */
-/*     seed = 0.0f; */
-/*   } */
-
-/*   // Seed the pi, means, and covariances for every cluster */
-/*   for(int c=0; c < num_components; c++) { */
-/*     if(tid < num_dimensions) { */
-/*       components->means[c*num_dimensions+tid] = fcs_data[((int)(c*seed))*num_dimensions+tid]; */
-/*     } */
-
-/*     for(int i=tid; i < num_elements; i+= num_threads) { */
-/*       // Add the average variance divided by a constant, this keeps the cov matrix from becoming singular */
-/*       row = (i) / num_dimensions; */
-/*       col = (i) % num_dimensions; */
-
-/*       if(row == col) { */
-/*         components->R[c*num_dimensions*num_dimensions+i] = 1.0f; */
-/*       } else { */
-/*         components->R[c*num_dimensions*num_dimensions+i] = 0.0f; */
-/*       } */
-/*     } */
-/*     if(tid == 0) { */
-/*       components->pi[c] = 1.0f/((float)num_components); */
-/*       components->N[c] = ((float) num_events) / ((float)num_components); */
-/*       components->avgvar[c] = avgvar / COVARIANCE_DYNAMIC_RANGE; */
-/*     } */
-/*   } */
-/* } */
 

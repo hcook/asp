@@ -30,8 +30,6 @@ static int num_scratch_components = 0;
 //CPU copies of eval data
 float *component_memberships;
 float *loglikelihoods;
-float *temploglikelihoods;
-
 
 //=== AHC function prototypes ===
 void copy_component(components_t *dest, int c_dest, components_t *src, int c_src, int num_dimensions);
@@ -95,7 +93,7 @@ components_t* alloc_temp_component_on_CPU(int num_dimensions) {
 }
 
 void dealloc_temp_components_on_CPU() {
-
+  printf("dealloc tempcomponents on CPU\n");
   for(int i = 0; i<num_scratch_components; i++) {
     free(scratch_component_arr[i]->N);
     free(scratch_component_arr[i]->pi);
@@ -181,7 +179,6 @@ void relink_components_on_CPU(pyublas::numpy_vector<float> weights, pyublas::num
 void alloc_evals_on_CPU(pyublas::numpy_vector<float> component_mem_np_arr, pyublas::numpy_vector<float> loglikelihoods_np_arr, int num_events, int num_components){
   component_memberships = component_mem_np_arr.data().data();
   loglikelihoods = loglikelihoods_np_arr.data().data();
-  temploglikelihoods = (float*)malloc(sizeof(float)*num_events*num_components);
 }
 
 // ================== Event data dellocation on CPU  ================= :
@@ -204,7 +201,6 @@ void dealloc_components_on_CPU() {
   //free(components.means);
   //free(components.R);
   //free(components.CP);
-
   free(components.N);
   free(components.constant);
   free(components.avgvar);
@@ -216,7 +212,6 @@ void dealloc_components_on_CPU() {
 void dealloc_evals_on_CPU() {
   //free(component_memberships);
   //free(loglikelihoods);
-  free(temploglikelihoods);
   return;
 }
 
