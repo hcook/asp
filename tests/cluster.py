@@ -405,6 +405,7 @@ def print_usage():
     basename: \t Basename of the file to process
     mfcc_feats: \t MFCC input feature file
     output_cluster: \t Output clustering file
+    gmm_output: \t Output GMMs parameters file
     M_mfcc: \t Amount of gaussains per model for mfcc
     initial_clusters: Number of initial clusters
 

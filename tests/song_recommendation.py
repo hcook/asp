@@ -19,7 +19,7 @@ import operator
 
 from em import *
 
-def read_song_tags_and_feats_to_dict():
+def get_song_dict():
     fileList = []
     rootdir = '/disk1/home_user/egonina/asp/MSD/MillionSongSubset/data/'
     for root, subFolders, files in os.walk(rootdir):
@@ -100,9 +100,10 @@ if __name__ == '__main__':
     rnd.seed(42)
     
     print "Reading Files"
-    #song_dict = read_song_tags_and_feats_to_dict()
+    #song_dict = get_song_dict()
     st = time.time()
-    
+
+    # assume the dictionary has been already read in and pickled
     p = open("/disk1/home_user/egonina/asp/MSD/all_file_dict_dump.pkl", "rb")
     song_dict = pickle.load(p)
     p.close()
