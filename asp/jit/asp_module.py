@@ -220,7 +220,7 @@ class SpecializedFunction(object):
         elapsed = time.time() - start
         #FIXME: where should key function live?
         #TODO: Should we use db.update instead of db.insert to avoid O(N) ops on already_run_variant_names = map(lambda x: x[1], already_run)?
-        self.db.insert(self.name, which, self.key(*args, **kwargs), elapsed)
+        self.db.update(self.name, which, self.key(*args, **kwargs), elapsed)
         return ret_val
 
 class HelperFunction(SpecializedFunction):
