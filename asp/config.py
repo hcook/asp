@@ -1,6 +1,8 @@
 import re
 import asp.jit.asp_module as asp_module
 from codepy.cgen import Include
+import yaml
+import os
 
 class CompilerDetector(object):
     """
@@ -129,3 +131,37 @@ class PlatformDetector(object):
         
     def read_cpu_info(self):
         return open("/proc/cpuinfo", "r").readlines()
+
+
+class ConfigReader(object):
+    """
+    Interface for reading a per-user configuration file in YAML format.  The
+    config file lives in ~/.asp_config.yml (on windows, ~ is equivalent to 
+    \Users\<current user>).  The format of the file should contain a specializer's
+    settings in its own hash.  E.g.:
+    specializer_foo:
+     - setting one
+     - setting two
+    specializer bar:
+     - setting etc
+
+    """
+    def __init__(self):
+        try:
+            self.stream = open(os.path.expanduser("~")+'/.asp_config.yml')
+            self.configs = yaml.load(self.stream)
+        except:
+            print "No configuration file ~/.asp_config.yml found."
+            self.configs = {}
+            
+        #translates from YAML file to Python dictionary
+
+    # given a key, return corresponding configs
+    # add functionality to iterate keys? 
+    def get_option(self, key):
+        try:
+            return self.configs[key]
+        except KeyError:
+            print "Configuration key %s not found" % key
+            return None
+

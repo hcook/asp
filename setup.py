@@ -39,7 +39,11 @@ setup(name="asp",
         "numpy",
         "codepy",
         "unittest2",
-        "mako"
+        "mako",
+        "mock",
+        "discover",
+        "yaml"
+
           ],
 
 
