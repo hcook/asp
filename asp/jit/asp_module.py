@@ -16,12 +16,22 @@ class ASPDB(object):
 
         if persistent:
             # create db file or load db
+            # create a per-user cache directory
             import tempfile, os
-            self.cache_dir = tempfile.gettempdir() + "/asp_cache"
+            if os.name == 'nt':
+                username = os.environ['USERNAME']
+            else:
+                username = os.environ['LOGNAME']
+
+            self.cache_dir = tempfile.gettempdir() + "/asp_cache_" + username
+
             if not os.access(self.cache_dir, os.F_OK):
                 os.mkdir(self.cache_dir)
             self.db_file = self.cache_dir + "/aspdb.sqlite3"
             self.connection = sqlite3.connect(self.db_file)
+            self.connection.execute("PRAGMA temp_store = MEMORY;")
+            self.connection.execute("PRAGMA synchronous = OFF;")
+            
         else:
             self.db_file = None
             self.connection = sqlite3.connect(":memory:")
@@ -78,15 +88,27 @@ class ASPDB(object):
     def update(self, fname, variant, key, value):
         """
         Updates an entry in the db.  Overwrites the timing information with value.
+        If the entry does not exist, does an insert.
         """
         if (not self.table_exists()):
             self.create_specializer_table()
             self.insert(fname, variant, key, value)
             return
 
-        query = "update "+self.specializer+" set perf=? where fname=? and variant=? and key=?"
-        self.connection.execute(query, (value, fname, variant, key))
-        self.connection.commit()
+        # check if the entry exists
+        query = "select count(*) from "+self.specializer+" where fname=? and variant=? and key=?;"
+        cursor = self.connection.cursor()
+        cursor.execute(query, (fname, variant, key))
+        count = cursor.fetchone()[0]
+        
+        # if it exists, do an update, otherwise do an insert
+        if count > 0:
+            query = "update "+self.specializer+" set perf=? where fname=? and variant=? and key=?"
+            self.connection.execute(query, (value, fname, variant, key))
+            self.connection.commit()
+        else:
+            self.insert(fname, variant, key, value)
+
 
     def delete(self, fname, variant, key):
         """
@@ -188,6 +210,7 @@ class SpecializedFunction(object):
         # get variants that have run
         already_run = self.db.get(self.name, key=self.key(*args, **kwargs))
 
+
         if already_run == []:
             already_run_variant_names = []
         else:
@@ -219,8 +242,9 @@ class SpecializedFunction(object):
         ret_val = self.backend.get_compiled_function(which).__call__(*args, **kwargs)
         elapsed = time.time() - start
         #FIXME: where should key function live?
+        #print "doing update with %s, %s, %s, %s" % (self.name, which, self.key(args, kwargs), elapsed)
+        self.db.update(self.name, which, self.key(args, kwargs), elapsed)
         #TODO: Should we use db.update instead of db.insert to avoid O(N) ops on already_run_variant_names = map(lambda x: x[1], already_run)?
-        self.db.update(self.name, which, self.key(*args, **kwargs), elapsed)
         return ret_val
 
 class HelperFunction(SpecializedFunction):
